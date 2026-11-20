@@ -9,7 +9,7 @@ g = E.apply(g, 'a', { type: 'start' }, rnd);
 ok(g.phase === 'play' && g.order.length === 3, 'старт');
 const profs = new Set(g.order.map((id) => g.players[id].ps.prof));
 ok(profs.size === 3, 'разные профессии');
-for (const id of g.order) { const ps = g.players[id].ps, p = E.prof(ps.prof); ok(E.expenses(ps) === p.expenses, `расходы ${p.name} = ${p.expenses}`); }
+for (const id of g.order) { const ps = g.players[id].ps, p = E.prof(ps.prof); ok(E.expenses(ps) === p.expenses && ps.baseExp > 0, `расходы ${p.name} = ${p.expenses}`); }
 ok(E.apply(g, 'b', { type: 'roll' }, rnd).error, 'чужой ход нельзя');
 // сыграем 400 ходов случайно разумной стратегией
 let freeSeen = false, bankrupt = 0, turnsLog = [], T0 = 0;
@@ -27,7 +27,7 @@ for (let t = 0; t < 1500 && g.phase === 'play'; t++) {
     if (p.type === 'stock') { a.choice = 'stockBuy'; a.qty = Math.floor(ps.cash / 4 / g.stocks[p.stock]); if (!a.qty) a.choice = 'skip'; }
     if (p.type === 'scam') a.choice = 'skip';
     if (p.type === 'charity') a.choice = ps.cash > p.amount * 3 ? 'buy' : 'skip';
-    if (p.type === 'buyer') { a.choice = 'sell'; a.asset = ps.assets.findIndex((x) => E.buyerWants(p, x)); }
+    if (p.type === 'buyer') { const i = ps.assets.findIndex((x) => E.buyerWants(p, x)); if (i >= 0) g = E.apply(g, id, { type: 'sellOffer', asset: i }, rnd); a.choice = 'skip'; }
     r = E.apply(g, id, a, rnd);
     if (r.error && p.type === 'offer') { const L = E.maxLoan(ps, g.stocks); const need = Math.ceil((E.deal(p.deal).down - ps.cash) / 1000) * 1000; if (need <= L) { g = E.apply(g, id, { type: 'loan', amount: need }, rnd); r = E.apply(g, id, a, rnd); } if (r.error) r = E.apply(g, id, { type: 'resolve', choice: 'skip' }, rnd); }
     if (r.error) { console.error('resolve error', p.type, r.error); process.exitCode = 1; break; }

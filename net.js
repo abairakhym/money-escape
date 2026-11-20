@@ -13,11 +13,13 @@ export function normalize(g) {
   g.order ||= [];
   g.log ||= [];
   g.pending ||= null;
+  g.offer ||= null;
   g.stocks ||= {};
   for (const p of Object.values(g.players)) {
     if (p.ps) {
       p.ps.assets = p.ps.assets ? Object.values(p.ps.assets) : [];
       p.ps.stocks ||= {};
+      p.ps.debts = p.ps.debts ? Object.values(p.ps.debts) : [];
     }
   }
   if (!Array.isArray(g.log)) g.log = Object.values(g.log);

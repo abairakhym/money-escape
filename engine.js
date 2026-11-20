@@ -2,16 +2,16 @@
 // Работают одинаково в браузере и в node (для тестов). Никакого DOM и сети здесь нет.
 
 export const PROFESSIONS = [
-  { id: 'courier', name: 'Курьер', icon: '🛵', salary: 1500, expenses: 1100, cash: 600, kid: 100, debt: { name: 'Кредит за скутер', amount: 2000 } },
-  { id: 'seller', name: 'Продавец', icon: '🛒', salary: 1800, expenses: 1350, cash: 700, kid: 120, debt: { name: 'Телефон в кредит', amount: 1500 } },
-  { id: 'teacher', name: 'Учитель', icon: '📚', salary: 2200, expenses: 1650, cash: 800, kid: 150, debt: { name: 'Кредит за учёбу', amount: 4000 } },
-  { id: 'firefighter', name: 'Пожарный', icon: '🚒', salary: 2400, expenses: 1750, cash: 900, kid: 180, debt: { name: 'Кредит за машину', amount: 4000 } },
-  { id: 'cook', name: 'Повар', icon: '🍳', salary: 2600, expenses: 1900, cash: 900, kid: 200, debt: { name: 'Кредит за машину', amount: 5000 } },
-  { id: 'blogger', name: 'Блогер', icon: '🎥', salary: 3000, expenses: 2300, cash: 1000, kid: 200, debt: { name: 'Кредит за технику', amount: 6000 } },
-  { id: 'builder', name: 'Строитель', icon: '🏗️', salary: 3200, expenses: 2400, cash: 1100, kid: 220, debt: { name: 'Кредит за машину', amount: 8000 } },
-  { id: 'programmer', name: 'Программист', icon: '💻', salary: 4200, expenses: 3100, cash: 1500, kid: 300, debt: { name: 'Ипотека', amount: 30000 } },
-  { id: 'pilot', name: 'Пилот', icon: '✈️', salary: 5500, expenses: 4200, cash: 1800, kid: 350, debt: { name: 'Ипотека', amount: 45000 } },
-  { id: 'doctor', name: 'Врач', icon: '🩺', salary: 6500, expenses: 5000, cash: 2000, kid: 400, debt: { name: 'Ипотека', amount: 60000 } },
+  { id: 'courier', name: 'Курьер', icon: '🛵', salary: 1500, expenses: 1100, cash: 600, kid: 100, debts: [['retail', 500], ['card', 1000], ['car', 2000]] },
+  { id: 'seller', name: 'Продавец', icon: '🛒', salary: 1800, expenses: 1350, cash: 700, kid: 120, debts: [['retail', 1000], ['card', 1500]] },
+  { id: 'teacher', name: 'Учитель', icon: '📚', salary: 2200, expenses: 1650, cash: 800, kid: 150, debts: [['study', 6000], ['car', 4000], ['card', 1500]] },
+  { id: 'firefighter', name: 'Пожарный', icon: '🚒', salary: 2400, expenses: 1750, cash: 900, kid: 180, debts: [['home', 20000], ['car', 4000], ['card', 2000]] },
+  { id: 'cook', name: 'Повар', icon: '🍳', salary: 2600, expenses: 1900, cash: 900, kid: 200, debts: [['home', 25000], ['car', 5000], ['card', 2000]] },
+  { id: 'blogger', name: 'Блогер', icon: '🎥', salary: 3000, expenses: 2300, cash: 1000, kid: 200, debts: [['retail', 3000], ['car', 6000], ['card', 2500]] },
+  { id: 'builder', name: 'Строитель', icon: '🏗️', salary: 3200, expenses: 2400, cash: 1100, kid: 220, debts: [['home', 30000], ['car', 8000], ['card', 2000]] },
+  { id: 'programmer', name: 'Программист', icon: '💻', salary: 4200, expenses: 3100, cash: 1500, kid: 300, debts: [['home', 50000], ['car', 10000], ['card', 3000]] },
+  { id: 'pilot', name: 'Пилот', icon: '✈️', salary: 5500, expenses: 4200, cash: 1800, kid: 350, debts: [['home', 80000], ['car', 15000], ['study', 10000], ['card', 4000]] },
+  { id: 'doctor', name: 'Врач', icon: '🩺', salary: 6500, expenses: 5000, cash: 2000, kid: 400, debts: [['home', 100000], ['study', 20000], ['car', 15000], ['card', 5000]] },
 ];
 
 export const DREAMS = [
@@ -110,7 +110,14 @@ export const MARKETS = [
 ];
 
 const LOAN_RATE = 0.1; // 1000 долга = 100 в месяц
-const START_DEBT_RATE = 0.03;
+// личные долги: каждый можно закрыть целиком, и его платёж исчезнет из расходов
+export const DEBT_TYPES = {
+  home: { name: 'Ипотека за свой дом', icon: '🏠', rate: 0.01 },
+  car: { name: 'Кредит за машину', icon: '🚗', rate: 0.04 },
+  study: { name: 'Кредит за учёбу', icon: '🎓', rate: 0.03 },
+  card: { name: 'Кредитная карта', icon: '💳', rate: 0.05 },
+  retail: { name: 'Покупки в рассрочку', icon: '🛍️', rate: 0.1 },
+};
 
 // ---------- помощники ----------
 export const round10 = (n) => Math.round(n / 10) * 10;
@@ -129,7 +136,10 @@ export function loanPayment(ps) {
 }
 export function expenses(ps) {
   const p = prof(ps.prof);
-  return ps.baseExp + (ps.kids || 0) * p.kid + loanPayment(ps) + (ps.debtLeft > 0 ? ps.debtPay : 0);
+  return ps.baseExp + (ps.kids || 0) * p.kid + loanPayment(ps) + debtPayments(ps);
+}
+export function debtPayments(ps) {
+  return (ps.debts || []).reduce((t, d) => t + (d.left > 0 ? d.pay : 0), 0);
 }
 export function cashflow(ps, stocks) {
   return (ps.salary || 0) + passive(ps, stocks) - expenses(ps);
@@ -149,13 +159,12 @@ function spendFactor(ps) {
 
 export function newPlayerState(profId) {
   const p = prof(profId);
-  const debtPay = Math.round(p.debt.amount * START_DEBT_RATE);
+  const debts = p.debts.map(([t, amt]) => ({ t, left: amt, pay: Math.round(amt * DEBT_TYPES[t].rate) }));
   return {
     prof: p.id,
     salary: p.salary,
-    baseExp: p.expenses - debtPay, // в расходы профессии уже входит платёж по стартовому долгу
-    debtPay,
-    debtLeft: p.debt.amount,
+    baseExp: p.expenses - debts.reduce((t, d) => t + d.pay, 0), // налоги, еда, жильё и прочее
+    debts,
     cash: p.cash,
     kids: 0,
     loan: 0,
@@ -252,6 +261,8 @@ const ACTIONS = {
     const two = a.two && ps.charity > 0;
     const d1 = 1 + Math.floor(rnd() * 6);
     const d2 = two ? 1 + Math.floor(rnd() * 6) : 0;
+    // предложение живёт один круг
+    if (g.offer && --g.offer.left <= 0) g.offer = null;
     const steps = d1 + d2;
     g.dice = { by, d: two ? [d1, d2] : [d1], n: g.seq + 1 };
     // биржа живёт: после каждого броска цены немного меняются (у ракет — сильно)
@@ -306,6 +317,9 @@ const ACTIONS = {
           ps.assets = [...(ps.assets || []), { deal: d.id, price: d.price, mortgage: d.price - d.down, income: d.income, kind: d.kind, n: g.seq + 1 }];
           log(g, `${name} купил(а): ${d.icon} ${d.name} (+${fmt(d.income)}/мес)`);
           checkFree(g, by);
+        } else if (a.choice === 'give' && g.order.length > 1) {
+          g.offer = { type: 'deal', deal: d.id, from: by, left: g.order.length, n: g.seq + 1 };
+          log(g, `🤝 ${name} отдаёт сделку «${d.name}» — кто первый заберёт?`);
         } else log(g, `${name} пропускает сделку «${d.name}»`);
         g.pending = null;
         endTurn(g);
@@ -376,15 +390,7 @@ const ACTIONS = {
         return g;
       }
       case 'buyer': {
-        if (a.choice === 'sell') {
-          const idx = Number(a.asset);
-          const asset = (ps.assets || [])[idx];
-          if (!asset || !buyerWants(p, asset)) return err('Выбери, что продать.');
-          const got = buyerPays(p, asset);
-          ps.cash += got;
-          ps.assets = ps.assets.filter((_, i) => i !== idx);
-          log(g, `${name} продал(а) ${deal(asset.deal).icon} ${deal(asset.deal).name} и получил(а) ${fmt(got)}`);
-        }
+        // продажа идёт через sellOffer (её может сделать любой игрок), здесь только «готово»
         g.pending = null;
         endTurn(g);
         return g;
@@ -417,11 +423,12 @@ const ACTIONS = {
       ps.loan -= amount;
       log(g, `${g.players[by].name} погасил(а) кредит ${fmt(amount)}`);
     } else {
-      if (ps.debtLeft <= 0) return err('Этот долг уже закрыт.');
-      if (ps.cash < ps.debtLeft) return err(`Чтобы закрыть долг, нужно ${fmt(ps.debtLeft)}.`);
-      ps.cash -= ps.debtLeft;
-      log(g, `${g.players[by].name} закрыл(а) «${prof(ps.prof).debt.name}» — расходы −${fmt(ps.debtPay)}/мес`);
-      ps.debtLeft = 0;
+      const d = (ps.debts || []).find((x) => x.t === a.t);
+      if (!d || d.left <= 0) return err('Этот долг уже закрыт.');
+      if (ps.cash < d.left) return err(`Чтобы закрыть долг, нужно ${fmt(d.left)}.`);
+      ps.cash -= d.left;
+      log(g, `${g.players[by].name} закрыл(а) «${DEBT_TYPES[d.t].name}» — расходы −${fmt(d.pay)}/мес`);
+      d.left = 0;
     }
     checkFree(g, by);
     return g;
@@ -462,6 +469,34 @@ const ACTIONS = {
       ps.stocks = { ...(ps.stocks || {}), [s.id]: have + q };
       log(g, `${pl.name} купил(а) ${q} шт. ${s.icon} ${s.name} по ${fmt(price)}`);
     }
+    checkFree(g, by);
+    return g;
+  },
+  // предложения для всех: покупатель с «Рынка» или сделка, которую отдал другой игрок
+  sellOffer(g, by, a) {
+    const o = g.offer, pl = g.players[by], ps = pl?.ps;
+    if (!o || o.type !== 'buyer') return err('Покупатель уже ушёл.');
+    if (!ps) return err('Ты не в игре.');
+    const idx = Number(a.asset), asset = (ps.assets || [])[idx];
+    if (!asset || !buyerWants(o, asset)) return err('Этому покупателю такое не нужно.');
+    const got = buyerPays(o, asset);
+    ps.cash += got;
+    ps.assets = ps.assets.filter((_, i) => i !== idx);
+    log(g, `${pl.name} продал(а) ${deal(asset.deal).icon} ${deal(asset.deal).name} и получил(а) ${fmt(got)}`);
+    if (ps.cash < 0) bankrupt(g, by);
+    return g;
+  },
+  takeDeal(g, by) {
+    const o = g.offer, pl = g.players[by], ps = pl?.ps;
+    if (!o || o.type !== 'deal') return err('Сделку уже забрали.');
+    if (!ps) return err('Ты не в игре.');
+    if (o.from === by) return err('Это твоя же сделка.');
+    const d = deal(o.deal);
+    if (ps.cash < d.down) return err(`Нужно ${fmt(d.down)} на взнос, у тебя ${fmt(ps.cash)}. Возьми кредит в банке.`);
+    ps.cash -= d.down;
+    ps.assets = [...(ps.assets || []), { deal: d.id, price: d.price, mortgage: d.price - d.down, income: d.income, kind: d.kind, n: g.seq + 1 }];
+    g.offer = null;
+    log(g, `${pl.name} забрал(а) сделку: ${d.icon} ${d.name}`);
     checkFree(g, by);
     return g;
   },
@@ -514,8 +549,6 @@ function payday(g, by, landed) {
   if (ps.fired > 0) ps.fired -= 1;
   const flow = salary + passive(ps, g.stocks) - expenses(ps);
   ps.cash += flow;
-  // стартовый долг понемногу гасится платежами
-  if (ps.debtLeft > 0) ps.debtLeft = Math.max(0, ps.debtLeft - ps.debtPay);
   ps.months = (ps.months || 0) + 1;
   log(g, `${name}: зарплата ${flow >= 0 ? '+' : ''}${fmt(flow)}${salary === 0 ? ' (без зарплаты)' : ''}`);
   if (ps.cash < 0) bankrupt(g, by);
@@ -607,9 +640,11 @@ function drawCard(g, by, cell, rnd) {
         log(g, `${name}: ${m.text} (+${fmt(add)})`);
         return { by, type: 'marketInfo', text: `${m.text}: +${fmt(add)}!` };
       }
-      const b = { who: m.who, deal: m.deal, mult: m.mult, fixed: m.fixed };
-      if (!(ps.assets || []).some((a) => buyerWants(b, a))) return { by, type: 'marketInfo', text: m.text + ' — но у тебя такого нет.' };
-      return { by, type: 'buyer', ...JSON.parse(JSON.stringify(b)), text: m.text };
+      const b = JSON.parse(JSON.stringify({ who: m.who, deal: m.deal, mult: m.mult, fixed: m.fixed, text: m.text }));
+      // покупатель предлагает всем, у кого есть такое, — до конца круга
+      g.offer = { type: 'buyer', ...b, from: by, left: g.order.length, n: g.seq + 1 };
+      log(g, `📢 ${m.text}`);
+      return { by, type: 'buyer', ...b };
     }
   }
   return null;
