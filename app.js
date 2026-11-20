@@ -346,8 +346,8 @@ function cardHTML(p) {
   if (v.deal) {
     const d = v.deal;
     body += `<div class="kv"><span>Цена</span><b>${fmt(d.price)}</b><span>Первый взнос</span><b>${fmt(d.down)}</b>
-      <span>Остаток в ипотеке</span><b>${fmt(d.price - d.down)}</b><span>Доход в месяц</span><b class="pos">+${fmt(d.income)}</b></div>
-      <p class="small muted">Окупится примерно за ${Math.ceil(d.down / d.income)} мес. У тебя ${fmt(ps.cash)}.</p>`;
+      <span>Остаток в ипотеке</span><b>${fmt(d.price - d.down)}</b><span>Доход в месяц</span><b class="${d.income >= 0 ? 'pos' : 'neg'}">${d.income >= 0 ? '+' : ''}${fmt(d.income)}</b></div>
+      <p class="small muted">${d.income > 0 ? 'Окупится примерно за ' + Math.ceil(d.down / d.income) + ' мес.' : d.kind === 'land' ? 'Земля не приносит денег каждый месяц' + (d.income < 0 ? ' и даже стоит ' + fmt(-d.income) + '/мес по ипотеке' : '') + ', зато её можно дорого продать, когда придёт покупатель на «Рынке».' : ''} У тебя ${fmt(ps.cash)}.</p>`;
     if (ps.cash < d.down) {
       const need = Math.ceil((d.down - ps.cash) / 1000) * 1000;
       if (need <= E.maxLoan(ps, g.stocks)) {
@@ -370,10 +370,10 @@ function cardHTML(p) {
     btns = [['stockBuy', 'Купить', 'primary'], ...(have ? [['stockSell', 'Продать', 'gold']] : []), ['skip', 'Пропустить', '']];
   }
   if (v.buyer) {
-    const list = ps.assets.map((a, i) => ({ a, i })).filter(({ a }) => a.kind === p.who);
+    const list = ps.assets.map((a, i) => ({ a, i })).filter(({ a }) => E.buyerWants(p, a));
     body += `<ul class="list">${list.map(({ a, i }) => {
-      const d = E.deal(a.deal), got = Math.round(a.price * p.mult - a.mortgage);
-      return `<li><span style="font-size:24px">${d.icon}</span><div class="grow"><b>${esc(d.name)}</b><div class="small muted">−${fmt(a.income)}/мес дохода</div></div>
+      const d = E.deal(a.deal), got = E.buyerPays(p, a);
+      return `<li><span style="font-size:24px">${d.icon}</span><div class="grow"><b>${esc(d.name)}</b><div class="small muted">купил за ${fmt(a.price)}${a.income ? ', доход ' + fmt(a.income) + '/мес' : ''}</div></div>
         <button class="btn primary" data-a="sell:${i}">+${fmt(got)}</button></li>`;
     }).join('')}</ul>`;
     btns = [['skip', 'Не продавать', '']];
@@ -423,7 +423,7 @@ function assetsHTML() {
     ${!ps.assets.length && !st.length ? '<p class="muted">Пока ничего нет. Ищи клетки «Сделка» 🏠 — там можно купить то, что приносит деньги.</p>' : ''}
     <ul class="list">${ps.assets.map((a, i) => {
       const d = E.deal(a.deal), got = Math.round(a.price * 0.8 - a.mortgage);
-      return `<li><span style="font-size:24px">${d.icon}</span><div class="grow"><b>${esc(d.name)}</b><div class="small pos">+${fmt(a.income)}/мес</div></div>
+      return `<li><span style="font-size:24px">${d.icon}</span><div class="grow"><b>${esc(d.name)}</b><div class="small ${a.income >= 0 ? 'pos' : 'neg'}">${a.income >= 0 ? '+' : ''}${fmt(a.income)}/мес</div></div>
         <button class="btn" data-b="sell:${i}" title="Срочная продажа за 80% цены">Продать ${fmt(got)}</button></li>`;
     }).join('')}
     ${st.map((s) => `<li><span style="font-size:24px">${s.icon}</span><div class="grow"><b>${esc(s.name)}</b><div class="small muted">${ps.stocks[s.id]} шт. × ${fmt(g.stocks[s.id])} = ${fmt(ps.stocks[s.id] * g.stocks[s.id])}</div></div></li>`).join('')}</ul>

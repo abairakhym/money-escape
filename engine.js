@@ -51,11 +51,13 @@ export const DEALS = [
   { id: 'garage', size: 'small', name: 'Гараж под сдачу', icon: '🚗', kind: 'home', price: 3000, down: 600, income: 120 },
   { id: 'room', size: 'small', name: 'Комната под сдачу', icon: '🛏️', kind: 'home', price: 5000, down: 1000, income: 200 },
   { id: 'kiosk', size: 'small', name: 'Ларёк с шаурмой', icon: '🌯', kind: 'biz', price: 4000, down: 2000, income: 250 },
+  { id: 'plot', size: 'small', name: 'Участок у реки', icon: '🌳', kind: 'land', price: 2000, down: 2000, income: 0 },
   { id: 'flat', size: 'small', name: 'Однушка под сдачу', icon: '🏢', kind: 'home', price: 9000, down: 1800, income: 300 },
   { id: 'carwash', size: 'big', name: 'Автомойка', icon: '🧽', kind: 'biz', price: 20000, down: 5000, income: 900 },
   { id: 'cafe', size: 'big', name: 'Кафе', icon: '☕', kind: 'biz', price: 30000, down: 8000, income: 1300 },
   { id: 'shop', size: 'big', name: 'Магазин у дома', icon: '🏪', kind: 'biz', price: 40000, down: 10000, income: 1700 },
   { id: 'fourplex', size: 'big', name: 'Дом на 4 квартиры', icon: '🏘️', kind: 'home', price: 60000, down: 12000, income: 2400 },
+  { id: 'field', size: 'big', name: 'Поле под застройку', icon: '🌾', kind: 'land', price: 12000, down: 4000, income: -80 },
   { id: 'hotel', size: 'big', name: 'Мини-отель', icon: '🏨', kind: 'biz', price: 90000, down: 20000, income: 3600 },
 ];
 
@@ -83,9 +85,22 @@ export const SPENDS = [
 ];
 
 export const MARKETS = [
-  { kind: 'buyer', who: 'home', mult: 1.6, text: 'Покупатель ищет жильё и предлагает 160% цены' },
+  // покупатели: на любое жильё/бизнес/землю или на конкретную вещь за фиксированную цену
+  { kind: 'buyer', who: 'home', mult: 1.6, text: 'Молодая семья ищет жильё и платит 160% цены' },
   { kind: 'buyer', who: 'biz', mult: 1.5, text: 'Инвестор хочет купить бизнес за 150% цены' },
-  { kind: 'buyer', who: 'home', mult: 2, text: 'Город строит метро рядом: жильё дорожает вдвое' },
+  { kind: 'buyer', who: 'home', mult: 2, text: 'Рядом открыли метро: жильё дорожает вдвое' },
+  { kind: 'buyer', deal: 'garage', fixed: 5000, text: 'Сосед мечтает о гараже и даёт $5 000' },
+  { kind: 'buyer', deal: 'room', fixed: 8000, text: 'Студенты ищут комнату: покупатель даёт $8 000' },
+  { kind: 'buyer', deal: 'flat', fixed: 15000, text: 'Однушки в цене: покупатель даёт $15 000' },
+  { kind: 'buyer', deal: 'carwash', fixed: 32000, text: 'Сеть автомоек скупает конкурентов: $32 000 за автомойку' },
+  { kind: 'buyer', who: 'land', mult: 3, text: 'Рядом строят трассу: земля дорожает втрое' },
+  { kind: 'buyer', who: 'land', mult: 2, text: 'Застройщик скупает землю вдвое дороже' },
+  // расходы и бонусы касаются того, кто встал на клетку
+  { kind: 'cost', who: 'home', per: 400, text: 'Прорвало трубы! Ремонт в каждом твоём жилье' },
+  { kind: 'cost', who: 'biz', per: 500, text: 'Налоговая проверка: штраф за каждый бизнес' },
+  { kind: 'cost', who: 'land', per: 200, text: 'Налог на землю за каждый участок' },
+  { kind: 'bonus', who: 'biz', text: 'Туристический сезон! Каждый бизнес приносит ещё месячный доход' },
+  { kind: 'bonus', who: 'home', text: 'Аренда подорожала: каждое жильё приносит бонус в месячный доход' },
   { kind: 'stock', id: 'games', mult: 2, text: 'ИгроСтудия выпустила хит — акции x2!' },
   { kind: 'stock', id: 'games', mult: 0.4, text: 'Игра ИгроСтудии провалилась — акции падают' },
   { kind: 'stock', id: 'rocket', mult: 3, text: 'КосмоЛёт долетел до Луны — акции x3!' },
@@ -364,8 +379,8 @@ const ACTIONS = {
         if (a.choice === 'sell') {
           const idx = Number(a.asset);
           const asset = (ps.assets || [])[idx];
-          if (!asset || asset.kind !== p.who) return err('Выбери, что продать.');
-          const got = Math.round(asset.price * p.mult - asset.mortgage);
+          if (!asset || !buyerWants(p, asset)) return err('Выбери, что продать.');
+          const got = buyerPays(p, asset);
           ps.cash += got;
           ps.assets = ps.assets.filter((_, i) => i !== idx);
           log(g, `${name} продал(а) ${deal(asset.deal).icon} ${deal(asset.deal).name} и получил(а) ${fmt(got)}`);
@@ -580,13 +595,28 @@ function drawCard(g, by, cell, rnd) {
         log(g, `📉 ${m.text}`);
         return { by, type: 'marketInfo', text: m.text };
       }
-      const owns = (ps.assets || []).some((a) => a.kind === m.who);
-      if (!owns) return { by, type: 'marketInfo', text: m.text + ' — но у тебя такого нет.' };
-      return { by, type: 'buyer', who: m.who, mult: m.mult, text: m.text };
+      const mine = (ps.assets || []).filter((a) => a.kind === m.who);
+      if (m.kind === 'cost') {
+        if (!mine.length) return { by, type: 'marketInfo', text: m.text + ' — тебя не касается, у тебя такого нет.' };
+        return { by, type: 'spend', icon: '🧾', text: m.text, amount: m.per * mine.length };
+      }
+      if (m.kind === 'bonus') {
+        if (!mine.length) return { by, type: 'marketInfo', text: m.text + ' — но у тебя такого нет.' };
+        const add = mine.reduce((t, a) => t + Math.max(0, a.income), 0);
+        ps.cash += add;
+        log(g, `${name}: ${m.text} (+${fmt(add)})`);
+        return { by, type: 'marketInfo', text: `${m.text}: +${fmt(add)}!` };
+      }
+      const b = { who: m.who, deal: m.deal, mult: m.mult, fixed: m.fixed };
+      if (!(ps.assets || []).some((a) => buyerWants(b, a))) return { by, type: 'marketInfo', text: m.text + ' — но у тебя такого нет.' };
+      return { by, type: 'buyer', ...JSON.parse(JSON.stringify(b)), text: m.text };
     }
   }
   return null;
 }
+
+export const buyerWants = (p, a) => (p.deal ? a.deal === p.deal : a.kind === p.who);
+export const buyerPays = (p, a) => Math.round((p.fixed ?? a.price * p.mult) - a.mortgage);
 
 function checkFree(g, by) {
   const pl = g.players[by];

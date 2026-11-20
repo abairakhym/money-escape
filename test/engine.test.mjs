@@ -1,5 +1,5 @@
 import * as E from '../engine.js';
-let seed = 5; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+let seed = 7; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
 const ok = (c, m) => { if (!c) { console.error('FAIL', m); process.exitCode = 1; } else console.log('ok', m); };
 let g = E.newGame('ABCD', 'a');
 for (const [id, n] of [['a', 'Аня'], ['b', 'Боря'], ['c', 'Вика']]) g = E.apply(g, id, { type: 'join', name: n }, rnd);
@@ -27,7 +27,7 @@ for (let t = 0; t < 1500 && g.phase === 'play'; t++) {
     if (p.type === 'stock') { a.choice = 'stockBuy'; a.qty = Math.floor(ps.cash / 4 / g.stocks[p.stock]); if (!a.qty) a.choice = 'skip'; }
     if (p.type === 'scam') a.choice = 'skip';
     if (p.type === 'charity') a.choice = ps.cash > p.amount * 3 ? 'buy' : 'skip';
-    if (p.type === 'buyer') { a.choice = 'sell'; a.asset = ps.assets.findIndex((x) => x.kind === p.who); }
+    if (p.type === 'buyer') { a.choice = 'sell'; a.asset = ps.assets.findIndex((x) => E.buyerWants(p, x)); }
     r = E.apply(g, id, a, rnd);
     if (r.error && p.type === 'offer') { const L = E.maxLoan(ps, g.stocks); const need = Math.ceil((E.deal(p.deal).down - ps.cash) / 1000) * 1000; if (need <= L) { g = E.apply(g, id, { type: 'loan', amount: need }, rnd); r = E.apply(g, id, a, rnd); } if (r.error) r = E.apply(g, id, { type: 'resolve', choice: 'skip' }, rnd); }
     if (r.error) { console.error('resolve error', p.type, r.error); process.exitCode = 1; break; }
