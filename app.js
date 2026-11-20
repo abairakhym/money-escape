@@ -88,7 +88,8 @@ function renderHome(prefill = '') {
       <p>🏠 «Сделка» — можно купить квартиру, ларёк или акции. Они приносят деньги каждый месяц.</p>
       <p>💸 Траты, 👶 ребёнок и 💼 увольнение мешают копить.</p>
       <p>🏦 В банке можно взять кредит, но за него платишь каждый месяц.</p>
-      <p>🏁 Ты свободен, когда <b>пассивный доход больше расходов</b>. Кто первый — победил!</p>
+      <p>🏁 Ты свободен, когда <b>пассивный доход больше расходов</b>.</p>
+      <p>🏆 Потом накопи на свою мечту и купи её. Кто первым — победил!</p>
     </details>`;
   const nm = $('#nm'), cd = $('#cd');
   const needName = () => {
@@ -149,8 +150,8 @@ function renderLobby() {
     </div>
     ${mine ? `<div class="card">
       <h3 style="font-size:16px;margin-bottom:10px">Твоя мечта</h3>
-      <div class="dreams">${E.DREAMS.map((d) => `<button data-d="${d.id}" class="${mine.dream === d.id ? 'on' : ''}"><span>${d.icon}</span>${esc(d.name)}</button>`).join('')}</div>
-      <p class="small muted" style="margin:10px 0 0">Профессию раздадут случайно, когда начнётся игра.</p>
+      <div class="dreams">${E.DREAMS.map((d) => `<button data-d="${d.id}" class="${mine.dream === d.id ? 'on' : ''}"><span>${d.icon}</span>${esc(d.name)}<i class="muted" style="font-style:normal">${fmt(d.price)}</i></button>`).join('')}</div>
+      <p class="small muted" style="margin:10px 0 0">Сначала выберись из денежной гонки, потом накопи на мечту. Кто первым купит мечту — победил. Дорогая мечта — сложнее! Профессию раздадут случайно.</p>
     </div>` : '<div class="card muted">Игра уже началась без тебя. Подожди следующую.</div>'}
     ${isHost()
       ? `<button id="start" class="btn primary big wide">Старт ▶</button>
@@ -228,7 +229,8 @@ function animateMoves(done) {
 function finances(id) {
   const ps = g.players[id].ps, p = E.prof(ps.prof);
   const pas = E.passive(ps, g.stocks), exp = E.expenses(ps), flow = E.cashflow(ps, g.stocks);
-  return { ps, p, pas, exp, flow, pct: Math.min(100, Math.round((pas / Math.max(1, exp)) * 100)) };
+  const d = dreamOf(id);
+  return { ps, p, pas, exp, flow, d, pct: Math.min(100, Math.round((pas / Math.max(1, exp)) * 100)), dpct: Math.max(0, Math.min(100, Math.round((ps.cash / d.price) * 100))) };
 }
 
 function renderGame() {
@@ -258,7 +260,7 @@ function renderGame() {
       </div>
       <div style="margin:14px 0 6px" class="row"><span class="grow small"><b>До свободы</b> — пассивный доход покрывает расходы</span><b>${f.pct}%</b></div>
       <div class="bar"><i style="width:${f.pct}%"></i></div>
-      ${f.ps.free ? '<p class="pos" style="font-weight:700;margin:10px 0 0">🎉 Ты свободен! Остальные ещё бегут.</p>' : ''}
+      ${f.ps.free ? dreamBlock(f) : ''}
       <div class="btns" style="margin-top:14px">
         <button class="btn" id="bank">🏦 Банк</button>
         <button class="btn" id="assets">💼 Активы · ${f.ps.assets.length + Object.values(f.ps.stocks).filter(Boolean).length}</button>
@@ -270,7 +272,7 @@ function renderGame() {
         const x = finances(id);
         return `<li><span class="dot" style="background:${g.players[id].color};color:${g.players[id].color}"></span>
           <div class="grow"><div class="row"><b class="grow">${nameOf(id)} ${x.p.icon}${x.ps.free ? ' 🏁' : ''}</b><span class="small">${fmt(x.ps.cash)}</span></div>
-          <div class="bar thin" style="margin-top:5px"><i style="width:${x.pct}%"></i></div></div>
+          <div class="bar thin" style="margin-top:5px"><i style="width:${x.ps.free ? x.dpct : x.pct}%;${x.ps.free ? 'background:var(--gold)' : ''}"></i></div></div>
           <span style="font-size:20px">${dreamOf(id)?.icon || ''}</span></li>`;
       }).join('')}</ul>
       ${isHost() && late && cur !== me && g.phase === 'play' ? '<button id="skip" class="btn ghost wide" style="margin-top:10px">⏭ Пропустить ход ' + nameOf(cur) + '</button>' : ''}
@@ -283,6 +285,7 @@ function renderGame() {
   $('#share').onclick = share;
   $('#bank') && ($('#bank').onclick = () => openSheet('bank'));
   $('#assets') && ($('#assets').onclick = () => openSheet('assets'));
+  $('#buydream') && ($('#buydream').onclick = () => act({ type: 'buyDream' }));
   $('#skip') && ($('#skip').onclick = () => act({ type: 'skip' }));
   $('#restart') && ($('#restart').onclick = () => openSheet('restart'));
   placeTokens();
@@ -387,6 +390,14 @@ async function cardAction(a) {
   sheet.querySelectorAll('button').forEach((b) => (b.disabled = false));
 }
 
+function dreamBlock(f) {
+  const can = f.ps.cash >= f.d.price;
+  return `<div style="margin-top:14px;padding:12px;border-radius:14px;background:var(--gold-soft)">
+    <div class="row"><span style="font-size:30px">${f.d.icon}</span><div class="grow"><b>Ты свободен! Копи на мечту</b><div class="small">${esc(f.d.name)}: ${fmt(f.ps.cash)} из ${fmt(f.d.price)}</div></div><b>${f.dpct}%</b></div>
+    <div class="bar" style="margin-top:8px"><i style="width:${f.dpct}%;background:var(--gold)"></i></div>
+    ${can ? `<button id="buydream" class="btn gold big wide" style="margin-top:10px">${f.d.icon} Купить мечту и победить!</button>` : ''}</div>`;
+}
+
 // ---------- банк, активы ----------
 function bankHTML() {
   const ps = myPS(), pr = E.prof(ps.prof), max = E.maxLoan(ps, g.stocks);
@@ -461,10 +472,13 @@ sheet.addEventListener('click', async (e) => {
 // ---------- финал ----------
 function renderEnd() {
   closeSheet();
-  const rank = [...g.order].sort((a, b) => (g.players[a].ps.freeAt ?? 999) - (g.players[b].ps.freeAt ?? 999));
-  app.innerHTML = `<div class="card party"><div class="big">🏁</div><h2>Все сбежали!</h2><p class="muted">Кто быстрее всех вышел на свободу:</p>
-    <ul class="list" style="text-align:left">${rank.map((id, i) => `<li><b style="width:26px">${['🥇', '🥈', '🥉'][i] || i + 1 + '.'}</b><span class="grow">${nameOf(id)} ${E.prof(g.players[id].ps.prof).icon}</span>
-      <span class="small muted">за ${g.players[id].ps.freeAt} мес. → ${dreamOf(id)?.icon || ''}</span></li>`).join('')}</ul></div>
+  const score = (id) => (id === g.winner ? 1e9 : 0) + (g.players[id].ps.free ? 1e6 + finances(id).dpct : finances(id).pct);
+  const rank = [...g.order].sort((a, b) => score(b) - score(a));
+  const w = g.winner, wd = dreamOf(w);
+  app.innerHTML = `<div class="card party"><div class="big">${wd?.icon || '🏆'}</div><h2>${w === me ? 'Ты победил!' : nameOf(w) + ' победил(а)!'}</h2>
+    <p class="muted">${nameOf(w)} купил(а) мечту «${esc(wd?.name)}» за ${g.players[w].ps.dreamAt} мес.</p>
+    <ul class="list" style="text-align:left">${rank.map((id, i) => { const x = finances(id); return `<li><b style="width:26px">${['🥇', '🥈', '🥉'][i] || i + 1 + '.'}</b><span class="grow">${nameOf(id)} ${x.p.icon}</span>
+      <span class="small muted">${id === w ? 'мечта ' + x.d.icon : x.ps.free ? 'свободен, мечта ' + x.dpct + '%' : 'до свободы ' + x.pct + '%'}</span></li>`; }).join('')}</ul></div>
     ${isHost() ? '<button id="again" class="btn primary big wide">Играть ещё ↺</button>' : '<p class="muted" style="text-align:center">Хозяин может начать новую игру.</p>'}
     <button id="out" class="btn ghost wide" style="margin-top:10px">Выйти</button>`;
   $('#again') && ($('#again').onclick = () => act({ type: 'restart' }));
@@ -483,7 +497,7 @@ function notices() {
     setTimeout(() => {
       sheetMode = 'party';
       sheet.innerHTML = `<div class="panel party"><div class="big">${d?.icon || '🎉'}</div><h2>${id === me ? 'Ты свободен!' : nameOf(id) + ' свободен(на)!'}</h2>
-        <p class="muted">Пассивный доход больше расходов — можно больше не работать ради денег.${d ? ' Мечта «' + esc(d.name) + '» сбылась!' : ''}</p>
+        <p class="muted">Пассивный доход больше расходов — деньги работают сами. Теперь последний рывок: накопить ${d ? fmt(d.price) + ' на мечту «' + esc(d.name) + '»' : 'на мечту'}. Кто первым купит мечту — победит!</p>
         <button class="btn primary wide" data-b="close">Круто!</button></div>`;
       sheet.hidden = false;
     }, 1300);

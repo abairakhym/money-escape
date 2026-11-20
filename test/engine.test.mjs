@@ -12,7 +12,7 @@ ok(profs.size === 3, 'разные профессии');
 for (const id of g.order) { const ps = g.players[id].ps, p = E.prof(ps.prof); ok(E.expenses(ps) === p.expenses, `расходы ${p.name} = ${p.expenses}`); }
 ok(E.apply(g, 'b', { type: 'roll' }, rnd).error, 'чужой ход нельзя');
 // сыграем 400 ходов случайно разумной стратегией
-let freeSeen = false, bankrupt = 0;
+let freeSeen = false, bankrupt = 0, turnsLog = [], T0 = 0;
 for (let t = 0; t < 1500 && g.phase === 'play'; t++) {
   const id = E.currentId(g);
   let r = E.apply(g, id, { type: 'roll', two: true }, rnd);
@@ -33,9 +33,12 @@ for (let t = 0; t < 1500 && g.phase === 'play'; t++) {
     if (r.error) { console.error('resolve error', p.type, r.error); process.exitCode = 1; break; }
     g = r;
   }
+  for (const pid of g.order) { const P = g.players[pid]; const d = E.DREAMS.find((x) => x.id === P.dream); if (P.ps.free && P.ps.cash >= d.price) { const r2 = E.apply(g, pid, { type: 'buyDream' }, rnd); if (r2.error) { console.error(r2.error); process.exitCode = 1; } else g = r2; break; } }
   for (const pid of g.order) if (g.players[pid].ps.restarts) bankrupt = Math.max(bankrupt, g.players[pid].ps.restarts);
   if (g.winner) freeSeen = true;
+  if (t % 50 === 0) turnsLog.push(t);
 }
 for (const id of g.order) { const ps = g.players[id].ps; console.log(g.players[id].name, E.prof(ps.prof).name, 'месяцев', ps.months, 'свободен', ps.free, 'на месяце', ps.freeAt, 'нал', ps.cash, 'пассив', E.passive(ps, g.stocks), 'расх', E.expenses(ps), 'активов', ps.assets.length, 'банкротств', ps.restarts || 0); }
-ok(freeSeen, 'кто-то вышел на свободу');
+ok(g.phase === 'end' && g.winner, 'кто-то купил мечту: ' + g.players[g.winner]?.name + ' ходов всего ' + g.log.length);
+for (const id of g.order) console.log(g.players[id].name, 'мечта', g.players[id].dream, 'свободен на', g.players[id].ps.freeAt, 'мечта на', g.players[id].ps.dreamAt);
 ok(JSON.stringify(g).length < 60000, 'состояние компактное: ' + JSON.stringify(g).length);

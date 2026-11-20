@@ -15,12 +15,13 @@ export const PROFESSIONS = [
 ];
 
 export const DREAMS = [
-  { id: 'yacht', name: 'Яхта', icon: '🛥️' },
-  { id: 'island', name: 'Свой остров', icon: '🏝️' },
-  { id: 'space', name: 'Полёт в космос', icon: '🚀' },
-  { id: 'castle', name: 'Замок', icon: '🏰' },
-  { id: 'team', name: 'Своя футбольная команда', icon: '⚽' },
-  { id: 'world', name: 'Кругосветка', icon: '🌍' },
+  // этап 2: выйдя на свободу, копишь на мечту. Кто первым купит — победил.
+  { id: 'world', name: 'Кругосветка', icon: '🌍', price: 25000 },
+  { id: 'yacht', name: 'Яхта', icon: '🛥️', price: 40000 },
+  { id: 'castle', name: 'Замок', icon: '🏰', price: 50000 },
+  { id: 'island', name: 'Свой остров', icon: '🏝️', price: 60000 },
+  { id: 'team', name: 'Своя футбольная команда', icon: '⚽', price: 70000 },
+  { id: 'space', name: 'Полёт в космос', icon: '🚀', price: 80000 },
 ];
 
 export const COLORS = ['#2F7DE1', '#E5484D', '#16A06A', '#F2A20C', '#8B5CF6', '#EC4899'];
@@ -416,6 +417,22 @@ const ACTIONS = {
     log(g, `${g.players[by].name} срочно продал(а) ${deal(asset.deal).name} за ${fmt(got)}`);
     return g;
   },
+  // этап 2: купить мечту и победить
+  buyDream(g, by) {
+    if (g.phase !== 'play') return err('Игра не идёт.');
+    const pl = g.players[by], ps = pl?.ps;
+    if (!ps) return err('Ты не в игре.');
+    if (!ps.free) return err('Сначала выберись из денежной гонки: пассивный доход должен быть больше расходов.');
+    const d = DREAMS.find((x) => x.id === pl.dream);
+    if (ps.cash < d.price) return err(`На мечту нужно ${fmt(d.price)}, у тебя ${fmt(ps.cash)}.`);
+    ps.cash -= d.price;
+    ps.dreamAt = ps.months || 0;
+    g.winner = by;
+    g.pending = null;
+    g.phase = 'end';
+    log(g, `🏆 ${pl.name} купил(а) мечту: ${d.icon} ${d.name}! Победа!`);
+    return g;
+  },
   // хозяин может пропустить ход игрока, который ушёл
   skip(g, by) {
     if (g.host !== by) return err('Пропустить чужой ход может только хозяин.');
@@ -540,24 +557,15 @@ function checkFree(g, by) {
   if (!ps.free && isFree(ps, g.stocks)) {
     ps.free = true;
     ps.freeAt = ps.months || 0;
-    log(g, `🎉 ${pl.name} сбежал(а) из денежной гонки — пассивный доход больше расходов!`);
-    if (!g.winner) g.winner = by;
+    log(g, `🎉 ${pl.name} сбежал(а) из денежной гонки! Теперь копит на мечту.`);
     g.freedNote = { by, n: g.seq + 1 };
   }
 }
 
 function endTurn(g) {
   for (const id of g.order) checkFree(g, id);
-  if (g.order.length && g.order.every((id) => g.players[id].ps.free)) {
-    g.phase = 'end';
-    log(g, 'Все игроки свободны! Игра окончена.');
-    return;
-  }
-  // следующий игрок, который ещё не свободен
-  for (let i = 0; i < g.order.length; i++) {
-    g.turn = (g.turn + 1) % g.order.length;
-    if (!g.players[currentId(g)].ps.free) break;
-  }
+  if (g.phase !== 'play') return;
+  g.turn = (g.turn + 1) % g.order.length;
   g.turnAt = Date.now();
 }
 
