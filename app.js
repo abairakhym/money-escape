@@ -10,7 +10,7 @@ const store = {
 };
 
 let T = null, me = null, g = null, code = null;
-let busy = false;
+let busy = false, qtyFor = -1;
 const shownPos = {};
 let lastDiceN = 0, lastLogN = null, lastFreedN = 0, lastBankruptN = 0, sheetKey = '', sheetMode = null, qty = 1;
 
@@ -361,7 +361,8 @@ function cardHTML(p) {
     const maxBuy = Math.floor(ps.cash / price);
     qty = Math.max(1, Math.min(qty, Math.max(maxBuy, have, 1)));
     body += `<p class="small muted">У тебя: ${have} шт. Можешь купить до ${maxBuy} шт.</p>
-      <div class="stepper"><button data-q="-10">−</button><b id="qty">${qty}</b><button data-q="10">+</button></div>
+      <div class="stepper"><button data-q="-10">−10</button><button data-q="-1">−</button><b id="qty">${qty}</b><button data-q="1">+</button><button data-q="10">+10</button></div>
+      <div style="text-align:center"><button class="btn ghost" data-q="max" style="min-height:36px;padding:6px 14px">На все деньги</button></div>
       <p class="small muted" style="text-align:center;margin-top:-4px">= ${fmt(qty * price)}</p>`;
     btns = [['stockBuy', 'Купить', 'primary'], ...(have ? [['stockSell', 'Продать', 'gold']] : []), ['skip', 'Пропустить', '']];
   }
@@ -441,7 +442,7 @@ function renderSheet() {
   if (!sheetMode) { sheet.hidden = true; sheet.innerHTML = ''; sheetKey = ''; return; }
   const key = sheetMode + ':' + g.seq;
   if (key === sheetKey) return;
-  if (sheetMode === 'card' && !sheetKey.startsWith('card')) qty = 1;
+  if (sheetMode === 'card' && qtyFor !== g.seq) { qty = 1; qtyFor = g.seq; }
   sheetKey = key;
   sheet.innerHTML = sheetMode === 'card' ? cardHTML(p) : sheetMode === 'bank' ? bankHTML() : sheetMode === 'assets' ? assetsHTML() : restartHTML();
   sheet.hidden = false;
@@ -452,8 +453,7 @@ sheet.addEventListener('click', async (e) => {
   if (b.dataset.q) {
     const s = E.STOCKS.find((x) => x.id === g.pending.stock), ps = myPS();
     const lim = Math.max(Math.floor(ps.cash / g.stocks[s.id]), ps.stocks[s.id] || 0, 1);
-    const stepv = Number(b.dataset.q);
-    qty = Math.max(1, Math.min(lim, qty + (qty < 10 && Math.abs(stepv) === 10 ? Math.sign(stepv) : stepv)));
+    qty = b.dataset.q === 'max' ? Math.max(1, Math.floor(ps.cash / g.stocks[s.id])) : Math.max(1, Math.min(lim, qty + Number(b.dataset.q)));
     sheetKey = ''; renderSheet();
     return;
   }

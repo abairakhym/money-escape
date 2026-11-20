@@ -153,8 +153,9 @@ input.code { text-transform: uppercase; letter-spacing: .3em; font-family: Unbou
 .kv b { text-align: right; }
 .hint { background: var(--gold-soft); border-radius: 12px; padding: 10px 12px; font-size: 14px; margin: 10px 0; }
 .stepper { display: flex; align-items: center; gap: 10px; justify-content: center; margin: 12px 0; }
-.stepper button { width: 46px; height: 46px; border-radius: 12px; border: 0; background: var(--gray-soft); font-size: 22px; font-weight: 800; cursor: pointer; }
-.stepper b { font-family: Unbounded, sans-serif; font-size: 24px; min-width: 70px; text-align: center; }
+.stepper { gap: 6px; }
+.stepper button { min-width: 46px; padding: 0 6px; height: 46px; border-radius: 12px; border: 0; background: var(--gray-soft); font-size: 22px; font-weight: 800; cursor: pointer; }
+.stepper b { font-family: Unbounded, sans-serif; font-size: 24px; min-width: 56px; text-align: center; }
 .watch { border-radius: 14px; padding: 12px; background: var(--bg); font-size: 14px; }
 
 .toasts { position: fixed; top: 10px; left: 0; right: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; z-index: 30; pointer-events: none; padding: 0 16px; }
