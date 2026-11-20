@@ -101,6 +101,16 @@ export const MARKETS = [
   { kind: 'cost', who: 'land', per: 200, text: 'Налог на землю за каждый участок' },
   { kind: 'bonus', who: 'biz', text: 'Туристический сезон! Каждый бизнес приносит ещё месячный доход' },
   { kind: 'bonus', who: 'home', text: 'Аренда подорожала: каждое жильё приносит бонус в месячный доход' },
+  // события без выбора: касаются ВСЕХ игроков, у кого есть такое
+  { kind: 'force', act: 'lose', deal: 'garage', text: 'Город сносит гаражи под новую дорогу. Компенсации нет — гаражи пропали' },
+  { kind: 'force', act: 'lose', deal: 'plot', text: 'Наводнение! Участки у реки ушли под воду' },
+  { kind: 'force', act: 'lose', deal: 'kiosk', text: 'Новый закон запретил ларьки у дороги — их убрали' },
+  { kind: 'force', act: 'fine', deal: 'cafe', per: 3000, text: 'Пожар на кухне кафе! Ремонт $3 000' },
+  { kind: 'force', act: 'fine', who: 'home', per: 300, text: 'Арендаторы съехали и всё сломали: $300 за каждое жильё' },
+  { kind: 'force', act: 'fine', deal: 'hotel', per: 5000, text: 'Санитарная проверка закрыла мини-отель на ремонт: $5 000' },
+  { kind: 'force', act: 'sell', deal: 'field', fixed: 40000, text: 'Город выкупает поля под стадион за $40 000 — отказаться нельзя' },
+  { kind: 'force', act: 'sell', deal: 'room', fixed: 9000, text: 'Университет выкупает все комнаты под общежитие за $9 000' },
+  { kind: 'force', act: 'sell', deal: 'vending', fixed: 3000, text: 'Сеть магазинов скупает все вендинговые автоматы по $3 000' },
   { kind: 'stock', id: 'games', mult: 2, text: 'ИгроСтудия выпустила хит — акции x2!' },
   { kind: 'stock', id: 'games', mult: 0.4, text: 'Игра ИгроСтудии провалилась — акции падают' },
   { kind: 'stock', id: 'rocket', mult: 3, text: 'КосмоЛёт долетел до Луны — акции x3!' },
@@ -659,6 +669,20 @@ function drawCard(g, by, cell, rnd) {
         for (const s of STOCKS) g.stocks[s.id] = Math.max(1, Math.round(g.stocks[s.id] * 0.5));
         log(g, `📉 ${m.text}`);
         return { by, type: 'marketInfo', text: m.text };
+      }
+      if (m.kind === 'force') {
+        const b = { who: m.who, deal: m.deal, fixed: m.fixed, mult: 1 };
+        const hit = [];
+        for (const id of g.order) {
+          const P = g.players[id], Q = P.ps, mine = (Q.assets || []).filter((a) => buyerWants(b, a));
+          if (!mine.length) continue;
+          if (m.act === 'lose') { Q.assets = Q.assets.filter((a) => !mine.includes(a)); hit.push(`${P.name} −${mine.length}`); }
+          if (m.act === 'fine') { const sum = m.per * mine.length; Q.cash -= sum; hit.push(`${P.name} −${fmt(sum)}`); if (Q.cash < 0) bankrupt(g, id); }
+          if (m.act === 'sell') { const got = mine.reduce((t, a) => t + buyerPays(b, a), 0); Q.cash += got; Q.assets = Q.assets.filter((a) => !mine.includes(a)); hit.push(`${P.name} +${fmt(got)}`); }
+        }
+        const res = hit.length ? ' (' + hit.join(', ') + ')' : ' — ни у кого такого нет.';
+        log(g, `📰 ${m.text}${res}`);
+        return { by, type: 'marketInfo', text: m.text + res };
       }
       const mine = (ps.assets || []).filter((a) => a.kind === m.who);
       if (m.kind === 'cost') {
