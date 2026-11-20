@@ -121,6 +121,15 @@ export const DEBT_TYPES = {
 
 // ---------- помощники ----------
 export const round10 = (n) => Math.round(n / 10) * 10;
+// платёж по ипотеке за купленную вещь: 1% остатка в месяц (уже вычтен из income сделки)
+export const MORT_RATE = 0.01;
+export const mortPay = (m) => Math.round(m * MORT_RATE);
+// купить сделку: full — целиком за наличные (дороже сейчас, доход больше), иначе взнос + ипотека
+export function makeAsset(d, full, n) {
+  const m = d.price - d.down;
+  return full ? { deal: d.id, price: d.price, mortgage: 0, income: d.income + mortPay(m), kind: d.kind, n }
+    : { deal: d.id, price: d.price, mortgage: m, income: d.income, kind: d.kind, n };
+}
 const clone = (o) => JSON.parse(JSON.stringify(o));
 export const prof = (id) => PROFESSIONS.find((p) => p.id === id);
 export const deal = (id) => DEALS.find((d) => d.id === id);
@@ -311,11 +320,13 @@ const ACTIONS = {
       }
       case 'offer': {
         const d = deal(p.deal);
-        if (a.choice === 'buy') {
-          if (ps.cash < d.down) return err(`Нужно ${fmt(d.down)} на первый взнос, у тебя ${fmt(ps.cash)}. Возьми кредит в банке или пропусти.`);
-          ps.cash -= d.down;
-          ps.assets = [...(ps.assets || []), { deal: d.id, price: d.price, mortgage: d.price - d.down, income: d.income, kind: d.kind, n: g.seq + 1 }];
-          log(g, `${name} купил(а): ${d.icon} ${d.name} (+${fmt(d.income)}/мес)`);
+        if (a.choice === 'buy' || a.choice === 'buyFull') {
+          const full = a.choice === 'buyFull', cost = full ? d.price : d.down;
+          if (ps.cash < cost) return err(`Нужно ${fmt(cost)}, у тебя ${fmt(ps.cash)}. Возьми кредит в банке или пропусти.`);
+          ps.cash -= cost;
+          const as = makeAsset(d, full, g.seq + 1);
+          ps.assets = [...(ps.assets || []), as];
+          log(g, `${name} купил(а)${full ? ' целиком' : ''}: ${d.icon} ${d.name} (${as.income >= 0 ? '+' : ''}${fmt(as.income)}/мес)`);
           checkFree(g, by);
         } else if (a.choice === 'give' && g.order.length > 1) {
           g.offer = { type: 'deal', deal: d.id, from: by, left: g.order.length, n: g.seq + 1 };
@@ -416,7 +427,7 @@ const ACTIONS = {
     if (!ps) return err('Ты не в игре.');
     const target = a.what === 'debt' ? 'debt' : 'loan';
     if (target === 'loan') {
-      const amount = Math.min(Math.floor((Number(a.amount) || 0) / 1000) * 1000, ps.loan || 0);
+      const amount = a.all ? ps.loan || 0 : Math.min(Math.floor((Number(a.amount) || 0) / 1000) * 1000, ps.loan || 0);
       if (amount <= 0) return err('Нечего гасить или сумма меньше 1 000.');
       if (ps.cash < amount) return err('Не хватает денег.');
       ps.cash -= amount;
@@ -425,11 +436,31 @@ const ACTIONS = {
     } else {
       const d = (ps.debts || []).find((x) => x.t === a.t);
       if (!d || d.left <= 0) return err('Этот долг уже закрыт.');
-      if (ps.cash < d.left) return err(`Чтобы закрыть долг, нужно ${fmt(d.left)}.`);
-      ps.cash -= d.left;
-      log(g, `${g.players[by].name} закрыл(а) «${DEBT_TYPES[d.t].name}» — расходы −${fmt(d.pay)}/мес`);
-      d.left = 0;
+      const amt = a.all ? d.left : Math.min(d.left, Math.floor((Number(a.amount) || 0) / 1000) * 1000);
+      if (amt <= 0) return err('Сумма — от 1 000.');
+      if (ps.cash < amt) return err(`Нужно ${fmt(amt)}, у тебя ${fmt(ps.cash)}.`);
+      ps.cash -= amt;
+      const was = d.pay;
+      d.left -= amt;
+      d.pay = d.left > 0 ? Math.max(10, Math.round(d.left * DEBT_TYPES[d.t].rate)) : 0;
+      log(g, d.left > 0 ? `${g.players[by].name} внёс(ла) ${fmt(amt)} за «${DEBT_TYPES[d.t].name}» — платёж ${fmt(was)} → ${fmt(d.pay)}/мес`
+        : `${g.players[by].name} закрыл(а) «${DEBT_TYPES[d.t].name}» — расходы −${fmt(was)}/мес`);
     }
+    checkFree(g, by);
+    return g;
+  },
+  // погасить ипотеку за купленную вещь целиком: доход растёт на её платёж
+  payMortgage(g, by, a) {
+    const ps = g.players[by]?.ps;
+    if (!ps) return err('Ты не в игре.');
+    const as = (ps.assets || [])[Number(a.asset)];
+    if (!as || !as.mortgage) return err('Тут нет ипотеки.');
+    if (ps.cash < as.mortgage) return err(`Нужно ${fmt(as.mortgage)}, у тебя ${fmt(ps.cash)}.`);
+    ps.cash -= as.mortgage;
+    const add = mortPay(as.mortgage);
+    as.income += add;
+    as.mortgage = 0;
+    log(g, `${g.players[by].name} погасил(а) ипотеку: ${deal(as.deal).name} (+${fmt(add)}/мес)`);
     checkFree(g, by);
     return g;
   },
@@ -492,9 +523,10 @@ const ACTIONS = {
     if (!ps) return err('Ты не в игре.');
     if (o.from === by) return err('Это твоя же сделка.');
     const d = deal(o.deal);
-    if (ps.cash < d.down) return err(`Нужно ${fmt(d.down)} на взнос, у тебя ${fmt(ps.cash)}. Возьми кредит в банке.`);
-    ps.cash -= d.down;
-    ps.assets = [...(ps.assets || []), { deal: d.id, price: d.price, mortgage: d.price - d.down, income: d.income, kind: d.kind, n: g.seq + 1 }];
+    const cost = a.full ? d.price : d.down;
+    if (ps.cash < cost) return err(`Нужно ${fmt(cost)}, у тебя ${fmt(ps.cash)}. Возьми кредит в банке.`);
+    ps.cash -= cost;
+    ps.assets = [...(ps.assets || []), makeAsset(d, a.full, g.seq + 1)];
     g.offer = null;
     log(g, `${pl.name} забрал(а) сделку: ${d.icon} ${d.name}`);
     checkFree(g, by);

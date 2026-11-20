@@ -330,14 +330,15 @@ function offerHTML() {
     if (o.from === me) return `<div class="card small muted">🤝 Ты отдал(а) сделку «${esc(d.name)}». Ждём, заберёт ли кто-нибудь.</div>`;
     return `<div class="card" style="border:2px solid var(--blue)"><div class="row"><span style="font-size:32px">${d.icon}</span><div class="grow">
       <b>${nameOf(o.from)} отдаёт сделку: ${esc(d.name)}</b><div class="small muted">Взнос ${fmt(d.down)} · доход ${d.income >= 0 ? '+' : ''}${fmt(d.income)}/мес · цена ${fmt(d.price)}</div></div></div>
-      <button class="btn primary wide" data-o="take" style="margin-top:10px" ${ps.cash < d.down ? 'disabled' : ''}>${ps.cash < d.down ? 'Не хватает на взнос — возьми кредит в банке' : 'Забрать за ' + fmt(d.down)}</button></div>`;
+      <div class="btns" style="margin-top:10px"><button class="btn primary" data-o="take" ${ps.cash < d.down ? 'disabled' : ''}>${ps.cash < d.down ? 'Не хватает на взнос — возьми кредит' : (d.price > d.down ? 'Взнос ' : 'Забрать за ') + fmt(d.down)}</button>
+      ${d.price > d.down && ps.cash >= d.price ? `<button class="btn gold" data-o="takefull">Целиком ${fmt(d.price)}</button>` : ''}</div></div>`;
   }
   return '';
 }
 app.addEventListener('click', async (e) => {
   const b = e.target.closest('[data-o]'); if (!b || b.disabled) return;
   b.disabled = true;
-  if (b.dataset.o === 'take') await act({ type: 'takeDeal' });
+  if (b.dataset.o === 'take' || b.dataset.o === 'takefull') await act({ type: 'takeDeal', full: b.dataset.o === 'takefull' });
   else await act({ type: 'sellOffer', asset: Number(b.dataset.o.split(':')[1]) });
 });
 
@@ -375,8 +376,12 @@ function cardHTML(p) {
   if (v.deal) {
     const d = v.deal;
     body += `<div class="kv"><span>Цена</span><b>${fmt(d.price)}</b><span>Первый взнос</span><b>${fmt(d.down)}</b>
-      <span>Остаток в ипотеке</span><b>${fmt(d.price - d.down)}</b><span>Доход в месяц</span><b class="${d.income >= 0 ? 'pos' : 'neg'}">${d.income >= 0 ? '+' : ''}${fmt(d.income)}</b></div>
+      <span>Остаток в ипотеке</span><b>${fmt(d.price - d.down)}</b><span>Доход с ипотекой</span><b class="${d.income >= 0 ? 'pos' : 'neg'}">${d.income >= 0 ? '+' : ''}${fmt(d.income)}/мес</b>
+      ${d.price > d.down ? `<span>Доход, если купить целиком</span><b class="pos">+${fmt(E.makeAsset(d, true).income)}/мес</b>` : ''}</div>
+      ${d.price > d.down ? `<p class="small muted">Взнос + ипотека — платишь мало сейчас, но часть дохода уходит банку. Целиком — дорого сейчас, зато весь доход твой. Ипотеку можно погасить позже в «Активах».</p>` : ''}
       <p class="small muted">${d.income > 0 ? 'Окупится примерно за ' + Math.ceil(d.down / d.income) + ' мес.' : d.kind === 'land' ? 'Земля не приносит денег каждый месяц' + (d.income < 0 ? ' и даже стоит ' + fmt(-d.income) + '/мес по ипотеке' : '') + ', зато её можно дорого продать, когда придёт покупатель на «Рынке».' : ''} У тебя ${fmt(ps.cash)}.</p>`;
+    if (ps.cash >= d.down) btns = [['buy', d.price > d.down ? 'Взнос ' + fmt(d.down) : 'Купить ' + fmt(d.price), 'primary'],
+      ...(d.price > d.down && ps.cash >= d.price ? [['buyFull', 'Целиком ' + fmt(d.price), 'gold']] : []), ...btns.filter(([a]) => a !== 'buy')];
     if (ps.cash < d.down) {
       const need = Math.ceil((d.down - ps.cash) / 1000) * 1000;
       if (need <= E.maxLoan(ps, g.stocks)) {
@@ -442,11 +447,13 @@ function bankHTML() {
     <div class="btns">
       <button class="btn gold" data-b="loan:1000" ${max < 1000 ? 'disabled' : ''}>+ Взять ${fmt(1000)}</button>
       <button class="btn" data-b="repay:1000" ${(ps.loan || 0) < 1000 || ps.cash < 1000 ? 'disabled' : ''}>Вернуть ${fmt(1000)}</button>
+      ${(ps.loan || 0) > 1000 ? `<button class="btn primary" data-b="repayall" ${ps.cash < ps.loan ? 'disabled' : ''}>Вернуть всё ${fmt(ps.loan)}</button>` : ''}
     </div>
     <h3 style="font-size:15px;margin:16px 0 4px">Твои долги</h3>
     <p class="small muted" style="margin:0">Закроешь долг целиком — его платёж навсегда исчезнет из расходов. Выгоднее всего закрывать те, где платёж большой, а остаток маленький.</p>
     <ul class="list">${ps.debts.map((d) => { const T = E.DEBT_TYPES[d.t]; return `<li><span style="font-size:22px">${T.icon}</span>
       <div class="grow"><b>${T.name}</b><div class="small muted">${d.left > 0 ? 'осталось ' + fmt(d.left) + ' · платёж ' + fmt(d.pay) + '/мес' : 'закрыт ✅'}</div></div>
+      ${d.left > 1000 ? `<button class="btn" data-b="debtpart:${d.t}" ${ps.cash < 1000 ? 'disabled' : ''} title="Внести часть">−${fmt(1000)}</button>` : ''}
       ${d.left > 0 ? `<button class="btn primary" data-b="debt:${d.t}" ${ps.cash < d.left ? 'disabled' : ''}>Закрыть</button>` : ''}</li>`; }).join('')}</ul>
     <button class="btn ghost wide" data-b="close" style="margin-top:14px">Закрыть</button></div>`;
 }
@@ -458,7 +465,9 @@ function assetsHTML() {
     <ul class="list">${ps.assets.map((a, i) => {
       const d = E.deal(a.deal), got = Math.round(a.price * 0.8 - a.mortgage);
       return `<li><span style="font-size:24px">${d.icon}</span><div class="grow"><b>${esc(d.name)}</b><div class="small ${a.income >= 0 ? 'pos' : 'neg'}">${a.income >= 0 ? '+' : ''}${fmt(a.income)}/мес</div></div>
-        <button class="btn" data-b="sell:${i}" title="Срочная продажа за 80% цены">Продать ${fmt(got)}</button></li>`;
+        <div style="display:flex;flex-direction:column;gap:6px;align-items:stretch">
+        ${a.mortgage ? `<button class="btn primary" data-b="mort:${i}" ${ps.cash < a.mortgage ? 'disabled' : ''} title="Погасить ипотеку: доход +${fmt(E.mortPay(a.mortgage))}/мес">Ипотека ${fmt(a.mortgage)} ✕</button>` : '<span class="small muted" style="text-align:right">без ипотеки ✅</span>'}
+        <button class="btn" data-b="sell:${i}" title="Срочная продажа за 80% цены">Продать ${fmt(got)}</button></div></li>`;
     }).join('')}
     ${st.map((s) => `<li><span style="font-size:24px">${s.icon}</span><div class="grow"><b>${esc(s.name)}</b><div class="small muted">${ps.stocks[s.id]} шт. × ${fmt(g.stocks[s.id])} = ${fmt(ps.stocks[s.id] * g.stocks[s.id])}</div></div></li>`).join('')}</ul>
     ${ps.assets.length ? '<p class="small muted">Срочная продажа — за 80% цены минус ипотека. Лучше ждать покупателя на клетке «Рынок» 📈.</p>' : ''}
@@ -525,7 +534,10 @@ sheet.addEventListener('click', async (e) => {
   const [kind, arg] = v.split(':');
   if (kind === 'loan') await act({ type: 'loan', amount: Number(arg) });
   if (kind === 'repay') await act({ type: 'repay', amount: Number(arg) });
-  if (kind === 'debt') await act({ type: 'repay', what: 'debt', t: arg });
+  if (kind === 'debt') await act({ type: 'repay', what: 'debt', t: arg, all: true });
+  if (kind === 'debtpart') await act({ type: 'repay', what: 'debt', t: arg, amount: 1000 });
+  if (kind === 'repayall') await act({ type: 'repay', all: true });
+  if (kind === 'mort') await act({ type: 'payMortgage', asset: Number(arg) });
   if (kind === 'sell') await act({ type: 'sell', asset: Number(arg) });
   if (kind === 'restart') { await act({ type: 'restart' }); return closeSheet(); }
   sheetKey = ''; renderSheet();
