@@ -475,11 +475,7 @@ function payday(g, by, landed) {
 
 function bankrupt(g, by) {
   const ps = g.players[by].ps;
-  // сначала продаём активы, пока не выйдем в плюс
-  while (ps.cash < 0 && (ps.assets || []).length) {
-    const a = ps.assets.pop();
-    ps.cash += Math.round(a.price * 0.8 - a.mortgage);
-  }
+  // порядок спасения: акции -> кредит банка -> продажа имущества -> новый старт
   for (const s of STOCKS) {
     if (ps.cash >= 0) break;
     const q = (ps.stocks || {})[s.id] || 0;
@@ -493,7 +489,15 @@ function bankrupt(g, by) {
       ps.loan = (ps.loan || 0) + need;
       ps.cash += need;
       log(g, `${g.players[by].name}: банк выдал вынужденный кредит ${fmt(need)}`);
-    } else {
+    }
+  }
+  while (ps.cash < 0 && (ps.assets || []).length) {
+    const a = ps.assets.pop();
+    ps.cash += Math.round(a.price * 0.8 - a.mortgage);
+    log(g, `${g.players[by].name}: пришлось срочно продать ${deal(a.deal).name}`);
+  }
+  if (ps.cash < 0) {
+    {
       // мягкое банкротство: новый старт с той же профессией и бонусом
       const fresh = newPlayerState(ps.prof);
       fresh.cash += 500;
