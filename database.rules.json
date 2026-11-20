@@ -1,0 +1,11 @@
+{
+  "rules": {
+    "rooms": {
+      "$code": {
+        ".read": "auth != null",
+        ".write": "auth != null && $code.length == 4",
+        ".validate": "!newData.exists() || newData.child('code').val() == $code"
+      }
+    }
+  }
+}
