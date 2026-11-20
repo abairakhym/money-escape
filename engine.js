@@ -628,6 +628,7 @@ function bankrupt(g, by) {
       fresh.restarts = (ps.restarts || 0) + 1;
       g.players[by].ps = fresh;
       log(g, `${g.players[by].name} разорился(ась) и начинает заново с бонусом +${fmt(500)}`);
+      note(g, by, '💥', 'Ты разорился(ась)', `Денег не хватило даже после продажи всего. Начинаешь заново той же профессией с бонусом ${fmt(500)}. Так бывает — попробуй держать запас наличных!`);
       g.bankruptNote = { by, n: g.seq + 1 };
     }
   }
@@ -676,9 +677,13 @@ function drawCard(g, by, cell, rnd) {
         for (const id of g.order) {
           const P = g.players[id], Q = P.ps, mine = (Q.assets || []).filter((a) => buyerWants(b, a));
           if (!mine.length) continue;
-          if (m.act === 'lose') { Q.assets = Q.assets.filter((a) => !mine.includes(a)); hit.push(`${P.name} −${mine.length}`); }
-          if (m.act === 'fine') { const sum = m.per * mine.length; Q.cash -= sum; hit.push(`${P.name} −${fmt(sum)}`); if (Q.cash < 0) bankrupt(g, id); }
-          if (m.act === 'sell') { const got = mine.reduce((t, a) => t + buyerPays(b, a), 0); Q.cash += got; Q.assets = Q.assets.filter((a) => !mine.includes(a)); hit.push(`${P.name} +${fmt(got)}`); }
+          const what = mine.map((a) => deal(a.deal).icon + ' ' + deal(a.deal).name).join(', ');
+          const inc = mine.reduce((t, a) => t + a.income, 0);
+          let res = '';
+          if (m.act === 'lose') { Q.assets = Q.assets.filter((a) => !mine.includes(a)); hit.push(`${P.name} −${mine.length}`); res = `У тебя забрали: ${what}. Доход ${inc >= 0 ? '−' + fmt(inc) : '+' + fmt(-inc)}/мес. Долг по ипотеке за них тоже списан.`; }
+          if (m.act === 'fine') { const sum = m.per * mine.length; Q.cash -= sum; hit.push(`${P.name} −${fmt(sum)}`); res = `Ты заплатил(а) ${fmt(sum)} за: ${what}.`; if (Q.cash < 0) { bankrupt(g, id); res += ' Денег не хватило — сработал банк или продажа имущества.'; } }
+          if (m.act === 'sell') { const got = mine.reduce((t, a) => t + buyerPays(b, a), 0); Q.cash += got; Q.assets = Q.assets.filter((a) => !mine.includes(a)); hit.push(`${P.name} +${fmt(got)}`); res = `У тебя выкупили: ${what}. Ты получил(а) ${fmt(got)} (после погашения ипотеки), но доход ${fmt(inc)}/мес больше не идёт.`; }
+          note(g, id, m.act === 'sell' ? '🤑' : m.act === 'fine' ? '🧾' : '😱', m.text, res);
         }
         const res = hit.length ? ' (' + hit.join(', ') + ')' : ' — ни у кого такого нет.';
         log(g, `📰 ${m.text}${res}`);
@@ -708,6 +713,11 @@ function drawCard(g, by, cell, rnd) {
 
 export const buyerWants = (p, a) => (p.deal ? a.deal === p.deal : a.kind === p.who);
 export const buyerPays = (p, a) => Math.round((p.fixed ?? a.price * p.mult) - a.mortgage);
+
+// личное уведомление игроку: покажется окном с кнопкой «Понятно»
+function note(g, to, icon, title, text) {
+  g.notes = [...(g.notes || []), { to, icon, title, text, n: g.seq + 1 }].slice(-12);
+}
 
 function checkFree(g, by) {
   const pl = g.players[by];

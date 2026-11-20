@@ -10,7 +10,7 @@ const store = {
 };
 
 let T = null, me = null, g = null, code = null;
-let busy = false, qtyFor = -1;
+let busy = false, qtyFor = -1, lastNoteN = null, noteQ = [];
 const shownPos = {};
 let lastDiceN = 0, lastLogN = null, lastFreedN = 0, lastBankruptN = 0, sheetKey = '', sheetMode = null, qty = 1;
 
@@ -503,6 +503,15 @@ function closeSheet() { sheetMode = null; sheetKey = ''; sheet.hidden = true; sh
 function renderSheet() {
   const p = g?.pending;
   const cardMine = g?.phase === 'play' && p && p.by === me && !animating;
+  if (sheetMode === 'note' || sheetMode === 'party') return;
+  if (noteQ.length && !animating) {
+    const x = noteQ.shift();
+    sheetMode = 'note';
+    sheet.innerHTML = `<div class="panel"><div class="cardhead"><div class="ico" style="background:var(--red-soft)">${x.icon}</div><h3>${esc(x.title)}</h3></div>
+      <p>${esc(x.text)}</p><button class="btn primary wide" data-b="close">Понятно</button></div>`;
+    sheet.hidden = false;
+    return;
+  }
   if (cardMine && !['bank', 'assets', 'market'].includes(sheetMode)) sheetMode = 'card';
   if (sheetMode === 'card' && !cardMine) sheetMode = null;
   if (!sheetMode) { sheet.hidden = true; sheet.innerHTML = ''; sheetKey = ''; return; }
@@ -561,6 +570,9 @@ function renderEnd() {
 
 // ---------- общий рендер ----------
 function notices() {
+  if (lastNoteN === null) lastNoteN = Math.max(0, ...(g.notes || []).map((x) => x.n));
+  for (const x of g.notes || []) if (x.n > lastNoteN && x.to === me) noteQ.push(x);
+  lastNoteN = Math.max(lastNoteN, ...(g.notes || []).map((x) => x.n));
   if (lastLogN === null) { lastLogN = g.log.at(-1)?.n || 0; lastFreedN = g.freedNote?.n || 0; lastBankruptN = g.bankruptNote?.n || 0; lastDiceN = g.dice?.n || 0; return; }
   for (const l of g.log) if (l.n > lastLogN && !(myP() && l.t.startsWith(myP().name))) toast(l.t);
   lastLogN = g.log.at(-1)?.n || lastLogN;

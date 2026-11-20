@@ -14,6 +14,7 @@ export function normalize(g) {
   g.log ||= [];
   g.pending ||= null;
   g.offer ||= null;
+  g.notes = g.notes ? Object.values(g.notes) : [];
   g.stocks ||= {};
   for (const p of Object.values(g.players)) {
     if (p.ps) {
