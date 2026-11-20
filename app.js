@@ -87,6 +87,7 @@ function renderHome(prefill = '') {
       <p>💰 Проходишь «Зарплату» — получаешь зарплату минус расходы.</p>
       <p>🏠 «Сделка» — можно купить квартиру, ларёк или акции. Они приносят деньги каждый месяц.</p>
       <p>💸 Траты, 👶 ребёнок и 💼 увольнение мешают копить.</p>
+      <p>📈 На бирже можно купить и продать акции в любой момент. Цены прыгают после каждого броска.</p>
       <p>🏦 В банке можно взять кредит, но за него платишь каждый месяц.</p>
       <p>🏁 Ты свободен, когда <b>пассивный доход больше расходов</b>.</p>
       <p>🏆 Потом накопи на свою мечту и купи её. Кто первым — победил!</p>
@@ -263,7 +264,8 @@ function renderGame() {
       ${f.ps.free ? dreamBlock(f) : ''}
       <div class="btns" style="margin-top:14px">
         <button class="btn" id="bank">🏦 Банк</button>
-        <button class="btn" id="assets">💼 Активы · ${f.ps.assets.length + Object.values(f.ps.stocks).filter(Boolean).length}</button>
+        <button class="btn" id="assets">💼 Активы · ${f.ps.assets.length}</button>
+        <button class="btn" id="market">📈 Биржа</button>
       </div>
     </div>` : '<div class="card muted">Ты смотришь эту игру со стороны.</div>'}
     <div class="card">
@@ -285,6 +287,7 @@ function renderGame() {
   $('#share').onclick = share;
   $('#bank') && ($('#bank').onclick = () => openSheet('bank'));
   $('#assets') && ($('#assets').onclick = () => openSheet('assets'));
+  $('#market') && ($('#market').onclick = () => openSheet('market'));
   $('#buydream') && ($('#buydream').onclick = () => act({ type: 'buyDream' }));
   $('#skip') && ($('#skip').onclick = () => act({ type: 'skip' }));
   $('#restart') && ($('#restart').onclick = () => openSheet('restart'));
@@ -427,6 +430,26 @@ function assetsHTML() {
     ${ps.assets.length ? '<p class="small muted">Срочная продажа — за 80% цены минус ипотека. Лучше ждать покупателя на клетке «Рынок» 📈.</p>' : ''}
     <button class="btn ghost wide" data-b="close" style="margin-top:10px">Закрыть</button></div>`;
 }
+function marketHTML() {
+  const ps = myPS();
+  const worth = E.STOCKS.reduce((t, s) => t + (ps.stocks[s.id] || 0) * g.stocks[s.id], 0);
+  return `<div class="panel"><div class="cardhead"><div class="ico" style="background:var(--violet-soft)">📈</div><div><h3>Биржа</h3><div class="small muted">Наличные ${fmt(ps.cash)} · акций на ${fmt(worth)}</div></div></div>
+    <p class="small muted">Цены меняются после каждого броска кубика. Покупай дешевле, продавай дороже — но угадать нельзя никогда. У КосмоЛёта самые сильные скачки.</p>
+    <ul class="list">${E.STOCKS.map((s) => {
+      const p = g.stocks[s.id], prev = g.prevStocks?.[s.id] ?? p, have = ps.stocks[s.id] || 0;
+      const ch = p - prev, pc = prev ? Math.round((ch / prev) * 100) : 0;
+      return `<li style="display:block"><div class="row"><span style="font-size:26px">${s.icon}</span><div class="grow"><b>${esc(s.name)}</b>
+        <div class="small muted">${s.div ? 'дивиденды $' + s.div + '/мес за акцию · ' : ''}у тебя ${have} шт.</div></div>
+        <div style="text-align:right"><b>${fmt(p)}</b><div class="small ${ch > 0 ? 'pos' : ch < 0 ? 'neg' : 'muted'}">${ch > 0 ? '▲ +' : ch < 0 ? '▼ ' : ''}${ch ? pc + '%' : 'без изменений'}</div></div></div>
+        <div class="btns quad" style="margin-top:8px">
+          <button class="btn" data-t="${s.id}:buy:1" ${ps.cash < p ? 'disabled' : ''}>+1</button>
+          <button class="btn" data-t="${s.id}:buy:10" ${ps.cash < p * 10 ? 'disabled' : ''}>+10</button>
+          <button class="btn" data-t="${s.id}:sell:1" ${!have ? 'disabled' : ''}>−1</button>
+          <button class="btn gold" data-t="${s.id}:sell:all" ${!have ? 'disabled' : ''}>Продать все</button>
+        </div></li>`;
+    }).join('')}</ul>
+    <button class="btn ghost wide" data-b="close" style="margin-top:10px">Закрыть</button></div>`;
+}
 function restartHTML() {
   return `<div class="panel"><h3 style="margin-bottom:10px">Начать заново?</h3><p class="muted">Все вернутся в комнату ожидания с теми же именами.</p>
     <div class="btns"><button class="btn danger" data-b="restart">Да, заново</button><button class="btn" data-b="close">Нет</button></div></div>`;
@@ -437,14 +460,14 @@ function closeSheet() { sheetMode = null; sheetKey = ''; sheet.hidden = true; sh
 function renderSheet() {
   const p = g?.pending;
   const cardMine = g?.phase === 'play' && p && p.by === me && !animating;
-  if (cardMine && sheetMode !== 'bank' && sheetMode !== 'assets') sheetMode = 'card';
+  if (cardMine && !['bank', 'assets', 'market'].includes(sheetMode)) sheetMode = 'card';
   if (sheetMode === 'card' && !cardMine) sheetMode = null;
   if (!sheetMode) { sheet.hidden = true; sheet.innerHTML = ''; sheetKey = ''; return; }
   const key = sheetMode + ':' + g.seq;
   if (key === sheetKey) return;
   if (sheetMode === 'card' && qtyFor !== g.seq) { qty = 1; qtyFor = g.seq; }
   sheetKey = key;
-  sheet.innerHTML = sheetMode === 'card' ? cardHTML(p) : sheetMode === 'bank' ? bankHTML() : sheetMode === 'assets' ? assetsHTML() : restartHTML();
+  sheet.innerHTML = sheetMode === 'card' ? cardHTML(p) : sheetMode === 'bank' ? bankHTML() : sheetMode === 'assets' ? assetsHTML() : sheetMode === 'market' ? marketHTML() : restartHTML();
   sheet.hidden = false;
 }
 sheet.addEventListener('click', async (e) => {
@@ -458,8 +481,13 @@ sheet.addEventListener('click', async (e) => {
     return;
   }
   if (b.dataset.a) return cardAction(b.dataset.a);
+  if (b.dataset.t) {
+    const [stock, side, n] = b.dataset.t.split(':');
+    await act({ type: 'trade', stock, side, qty: Number(n) || 0, all: n === 'all' });
+    sheetKey = ''; return renderSheet();
+  }
   const v = b.dataset.b; if (!v) return;
-  if (v === 'close') return closeSheet();
+  if (v === 'close') { closeSheet(); if (g?.phase === 'play') renderSheet(); return; }
   const [kind, arg] = v.split(':');
   if (kind === 'loan') await act({ type: 'loan', amount: Number(arg) });
   if (kind === 'repay') await act({ type: 'repay', amount: Number(arg) });
@@ -488,7 +516,7 @@ function renderEnd() {
 // ---------- общий рендер ----------
 function notices() {
   if (lastLogN === null) { lastLogN = g.log.at(-1)?.n || 0; lastFreedN = g.freedNote?.n || 0; lastBankruptN = g.bankruptNote?.n || 0; lastDiceN = g.dice?.n || 0; return; }
-  for (const l of g.log) if (l.n > lastLogN && !l.t.startsWith(myP()?.name + ':')) toast(l.t);
+  for (const l of g.log) if (l.n > lastLogN && !(myP() && l.t.startsWith(myP().name))) toast(l.t);
   lastLogN = g.log.at(-1)?.n || lastLogN;
   if (g.freedNote && g.freedNote.n > lastFreedN) {
     lastFreedN = g.freedNote.n;

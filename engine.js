@@ -61,9 +61,9 @@ export const DEALS = [
 
 // Акции: цены меняют карточки рынка
 export const STOCKS = [
-  { id: 'bread', name: 'ХлебЗавод', icon: '🥖', start: 20, div: 0.5 }, // спокойная, маленькие дивиденды
-  { id: 'games', name: 'ИгроСтудия', icon: '🎮', start: 15, div: 0 },
-  { id: 'rocket', name: 'КосмоЛёт', icon: '🛰️', start: 10, div: 0 },
+  { id: 'bread', name: 'ХлебЗавод', icon: '🥖', start: 20, div: 0.5, vol: 0.06, drift: 0.01 }, // спокойная, маленькие дивиденды
+  { id: 'games', name: 'ИгроСтудия', icon: '🎮', start: 15, div: 0, vol: 0.14, drift: 0.015 },
+  { id: 'rocket', name: 'КосмоЛёт', icon: '🛰️', start: 10, div: 0, vol: 0.28, drift: 0.02 },
 ];
 
 // Неожиданные траты: базовая сумма для курьера, у остальных больше
@@ -239,6 +239,12 @@ const ACTIONS = {
     const d2 = two ? 1 + Math.floor(rnd() * 6) : 0;
     const steps = d1 + d2;
     g.dice = { by, d: two ? [d1, d2] : [d1], n: g.seq + 1 };
+    // биржа живёт: после каждого броска цены немного меняются (у ракет — сильно)
+    g.prevStocks = { ...g.stocks };
+    for (const s of STOCKS) {
+      const p = g.stocks[s.id], pull = 0.08 * (s.start / p - 1); // слишком дешёвые тянутся вверх, дорогие — вниз
+      g.stocks[s.id] = Math.max(2, Math.round(p * (1 + s.drift + pull + (rnd() * 2 - 1) * s.vol)));
+    }
     if (ps.charity > 0) ps.charity -= 1;
     // проходим клетки: каждая «Зарплата» по пути приносит месячный поток
     let pos = ps.pos;
@@ -415,6 +421,33 @@ const ACTIONS = {
     ps.cash += got;
     ps.assets = ps.assets.filter((_, i) => i !== idx);
     log(g, `${g.players[by].name} срочно продал(а) ${deal(asset.deal).name} за ${fmt(got)}`);
+    return g;
+  },
+  // биржа: купить или продать акции можно в любой момент по текущей цене
+  trade(g, by, a) {
+    if (g.phase !== 'play') return err('Игра не идёт.');
+    const pl = g.players[by], ps = pl?.ps;
+    if (!ps) return err('Ты не в игре.');
+    const s = STOCKS.find((x) => x.id === a.stock);
+    if (!s) return err('Нет такой компании.');
+    const price = g.stocks[s.id], have = (ps.stocks || {})[s.id] || 0;
+    let q = Math.floor(Number(a.qty) || 0);
+    if (a.side === 'sell') {
+      if (a.all) q = have;
+      q = Math.min(q, have);
+      if (q <= 0) return err('Нечего продавать.');
+      ps.cash += q * price;
+      ps.stocks = { ...ps.stocks, [s.id]: have - q };
+      log(g, `${pl.name} продал(а) ${q} шт. ${s.icon} ${s.name} по ${fmt(price)}`);
+    } else {
+      if (a.all) q = Math.floor(ps.cash / price);
+      if (q <= 0) return err('Не хватает денег даже на одну акцию.');
+      if (q * price > ps.cash) return err(`Не хватает денег: нужно ${fmt(q * price)}.`);
+      ps.cash -= q * price;
+      ps.stocks = { ...(ps.stocks || {}), [s.id]: have + q };
+      log(g, `${pl.name} купил(а) ${q} шт. ${s.icon} ${s.name} по ${fmt(price)}`);
+    }
+    checkFree(g, by);
     return g;
   },
   // этап 2: купить мечту и победить

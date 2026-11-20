@@ -1,5 +1,5 @@
 import * as E from '../engine.js';
-let seed = 7; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+let seed = 5; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
 const ok = (c, m) => { if (!c) { console.error('FAIL', m); process.exitCode = 1; } else console.log('ok', m); };
 let g = E.newGame('ABCD', 'a');
 for (const [id, n] of [['a', 'Аня'], ['b', 'Боря'], ['c', 'Вика']]) g = E.apply(g, id, { type: 'join', name: n }, rnd);
